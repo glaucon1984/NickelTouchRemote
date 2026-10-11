@@ -63,7 +63,15 @@ The defaults match the WX02 ring:
 | upper | swipe towards smaller Y (`swipe_up`) | previous page |
 | middle | tap | `swap`: exchange next and previous until the next press |
 
-Two ways to read with the ring in the other hand:
+### Why `swap` and `invert` exist
+
+The ring is meant to sit on a finger, but it can also be built into a case so that its
+buttons become physical page buttons. I use it in my
+[Kobo Clara BW/Colour turn-page buttons case](https://makerworld.com/en/models/3400159-kobo-clara-bw-color-turn-page-buttons-case),
+a 3D-printed case with two thumb buttons on one edge that press the ring inside. Buttons
+on one edge are right for one hand only. To read with the other hand you turn the reader
+around, and then the button that used to turn forward turns back. The middle button is
+there to fix that, in one of two ways:
 
 - **`swap`** (default) only exchanges the two page buttons.
 - **`invert`** turns the whole screen upside down, the way "invert rotation" works in
@@ -75,16 +83,27 @@ Two ways to read with the ring in the other hand:
 
 Set `tap = invert` in the configuration to get the second behaviour.
 
-The mod also connects the ring by itself. Nickel only connects a remote when you pick it
-on its Bluetooth settings page, and the ring does not initiate the connection either. So
-whenever Bluetooth is on and no remote is connected, the mod asks the Bluetooth daemon to
-connect the last remote it used: right away when Bluetooth comes on or the Kobo wakes
-from sleep, then every 20 seconds for the first attempts and every minute after that,
-and immediately when Nickel's settings page sees the ring in a scan. Switch the ring on
-and it is connected a few seconds later. Nickel's own Bluetooth timeout still switches
-the radio off when nothing is connected for a while, as before. `auto_connect = false`
-turns this off. With two rings, the mod reconnects the one used last; pick the other one
-on the settings page once and it becomes the last one.
+### Connecting
+
+Nickel only connects a remote when you pick it on its Bluetooth settings page, and the
+ring does not initiate the connection either. The mod takes that over:
+
+- **The first time**, connect a new remote by hand once: Bluetooth on, settings page, pick
+  the ring. The mod learns it at that moment and remembers it in
+  `.adds/touchremote/remotes`.
+- **The last used remote reconnects by itself.** Whenever Bluetooth is on and no remote is
+  connected, the mod asks the Bluetooth daemon to connect it: right away when Bluetooth
+  comes on or the Kobo wakes from sleep, then every 20 seconds for the first attempts and
+  every minute after that. Switch the ring on and it is connected a few seconds later,
+  with no tap on the Kobo.
+- **Another known remote needs a scan.** The Kobo's Bluetooth stack reaches only the
+  device it connected last with a direct request; a different one has to be seen in a
+  scan first. Open Nickel's Bluetooth settings page, which makes Nickel scan, and the mod
+  connects the remote as soon as it appears, without a tap. From then on that remote is
+  the last used one and reconnects by itself.
+
+Nickel's own Bluetooth timeout still switches the radio off when nothing is connected for
+a while, as before. `auto_connect = false` turns the automatic connection off.
 
 While the ring is in use, the mod tells Nickel that a Bluetooth remote is active, so
 Nickel's Bluetooth inactivity timer does not switch the radio off mid-chapter, and it
@@ -207,12 +226,6 @@ docker run --rm -v "$PWD:/src" -w /src ghcr.io/pgaskin/nickeltc:1.0 make koboroo
 `tools/remote-build.sh [ssh-host]` does the same on a machine that has Docker and copies
 `KoboRoot.tgz` to `build/`. `make test` compiles and runs the gesture tests with the host
 compiler. The GitHub workflow runs both and attaches `KoboRoot.tgz` to every build.
-
-## The setup this was written for
-
-I use the ring inside a 3D-printed case with thumb buttons for the Clara BW and Clara
-Colour, which is why switching hands by turning the reader around matters so much:
-[Kobo Clara BW/Colour turn-page buttons case](https://makerworld.com/en/models/3400159-kobo-clara-bw-color-turn-page-buttons-case).
 
 ## Acknowledgements
 
