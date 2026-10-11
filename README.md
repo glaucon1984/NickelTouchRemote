@@ -188,9 +188,26 @@ Nickel would otherwise handle as well.
 
 ## Uninstall
 
-Create an empty file called `uninstall` in `.adds/touchremote` and restart the Kobo. The
-mod removes its library and the Kobo starts normally. The `.adds/touchremote` folder can
-then be deleted.
+1. Connect the Kobo over USB and create an empty file at this path on the drive:
+
+   ```
+   KOBOeReader/.adds/touchremote/uninstall
+   ```
+
+   On Windows, show hidden items in Explorer to see `.adds`, then right-click in the
+   `touchremote` folder, New > Text Document, and name it `uninstall` with no extension.
+   Any empty file with that name works; its contents are ignored.
+
+2. Eject the Kobo and restart it: hold the power button until it switches off, then
+   switch it on again. At start-up the mod sees the flag, deletes its own library
+   (`/usr/local/Kobo/imageformats/libtouchremote.so`) and the flag, and Nickel continues
+   without it.
+
+3. Optionally delete the `.adds/touchremote` folder. It only holds your settings, the
+   learned remotes and the doc files; leaving it in place lets a later reinstall pick up
+   the same settings.
+
+The ring's pairing lives in Nickel's Bluetooth settings and is not affected either way.
 
 ## How it works
 
