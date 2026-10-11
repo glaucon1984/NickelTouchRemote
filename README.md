@@ -2,7 +2,7 @@
 
 Turn pages on a Kobo with the cheap "TikTok ring" Bluetooth page turners, inside Kobo's
 own software. No KOReader needed: the ring works in Kobo's reader and in
-[Kobalt](https://github.com/nicoverbruggen/kobalt), and the home screen and menus are
+[Kobalt](https://kobalt.nicoverbruggen.be), and the home screen and menus are
 untouched.
 
 NickelTouchRemote is a [NickelHook](https://github.com/pgaskin/NickelHook) mod, the same
@@ -37,6 +37,8 @@ and Kobalt already turn pages on those keys.
 | WX02 ring (three buttons, classic Bluetooth, Apple vendor id `05AC:0220`) | Tested |
 | Other touch-style remotes | Should work; the gesture logic is generic. See [Other remotes](#other-remotes) |
 | Ordinary keyboard-style remotes | Not needed: Nickel handles those natively. The mod leaves them alone unless you map their keys |
+| Kobo's built-in reader | Tested |
+| [Kobalt](https://kobalt.nicoverbruggen.be) | Tested. Kobalt's reader turns pages on the same arrow keys and follows the same screen rotation, so the ring works there without any Kobalt-specific setup |
 
 It runs alongside NickelMenu, NickelClock, NickelDissolve, NickelHome, NickelTypeFix and
 Kobalt on my device. It hooks no Nickel function, so it cannot conflict with mods that do.
