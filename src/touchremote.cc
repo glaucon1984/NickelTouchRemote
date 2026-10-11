@@ -10,11 +10,13 @@
 #include <string.h>
 #include <sys/ioctl.h>
 #include <sys/stat.h>
+#include <time.h>
 #include <unistd.h>
 
 #include <QApplication>
 #include <QCoreApplication>
 #include <QDBusArgument>
+#include <QDBusObjectPath>
 #include <QDBusConnection>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
@@ -53,12 +55,24 @@ const char *const hidGenericNewId = "/sys/bus/hid/drivers/hid-generic/new_id";
 const char *const configFile = TR_CONFIG_DIR "/config.ini";
 const char *const knownIdsFile = TR_CONFIG_DIR "/devices";
 const char *const dumpLogFlag = TR_CONFIG_DIR "/dumplog";
+const char *const remotesFile = TR_CONFIG_DIR "/remotes";
 const char *const adapterPath = "/org/bluez/hci0";
 
 const int bindBurstTicks = 25;         // seconds of 1 s bind attempts after a connection
 const int fallbackIntervalMs = 10000;  // slow re-check while Bluetooth is powered
 const int heartbeatIntervalMs = 5000;
 const int dumpDelayMs = 60000;
+// Direct connection attempts: a Connect to an absent device occupies the
+// daemon for about 15 s, so space attempts out, quickly at first (right after
+// Bluetooth comes on or the Kobo wakes, when the ring is usually switched on
+// too) and slowly afterwards. Nickel's own inactivity timeout ends the loop by
+// powering Bluetooth off.
+const int connectBurstAttempts = 5;
+const int connectBurstIntervalMs = 20000;
+const int connectSlowIntervalMs = 60000;
+const int connectMinSpacingMs = 15000;
+const int wakeTickMs = 5000;
+const int wakeGapSeconds = 30;
 
 const unsigned longBits = 8 * sizeof(unsigned long);
 
@@ -100,7 +114,7 @@ Action parseAction(const QString &text) {
 Settings::Settings()
     : tap(ActionSwap), swipeUp(ActionPrev), swipeDown(ActionNext), swipeLeft(ActionNone),
       swipeRight(ActionNone), swapWhenInverted(true), grabTouchDevices(true), grabOtherDevices(false),
-      viewMethods(false), powerActivity(true), verbose(false) {}
+      viewMethods(false), powerActivity(true), autoConnect(true), verbose(false) {}
 
 bool Settings::load(const QString &file) {
     *this = Settings();
@@ -131,6 +145,7 @@ bool Settings::load(const QString &file) {
     grabOtherDevices = settings.value("grab_other_devices", false).toBool();
     viewMethods = settings.value("inject", "keys").toString().trimmed().toLower() == "view";
     powerActivity = settings.value("power_activity", true).toBool();
+    autoConnect = settings.value("auto_connect", true).toBool();
     verbose = settings.value("verbose", false).toBool();
     settings.endGroup();
     return true;
@@ -210,9 +225,13 @@ void Device::key(uint16_t code, int32_t value) {
 // --- Controller
 
 Controller::Controller()
-    : QObject(0), watcher(0), bindTimer(0), fallbackTimer(0), dumpTimer(0), bindTicks(0), started(false),
-      powered(false), swapped(false) {
+    : QObject(0), watcher(0), bindTimer(0), fallbackTimer(0), dumpTimer(0), connectTimer(0), wakeTimer(0),
+      connectAttempts(0), wakeClock(0),
+      bindTicks(0), started(false), powered(false), swapped(false) {
     lastHeartbeat.invalidate();
+    lastConnectedAt.invalidate();
+    lastRemoteOpenedAt.invalidate();
+    lastAttempt.invalidate();
     // Firmware 4 on MediaTek devices runs Kobo's bluedroid bridge under its own
     // bus name; other devices and firmware 5+ use BlueZ's. Both speak the
     // org.bluez interfaces.
@@ -228,6 +247,7 @@ void Controller::start() {
     ::mkdir(TR_CONFIG_DIR, 0755);
     reloadSettings();
     loadKnownIds();
+    loadRemotes();
 
     watcher = new QFileSystemWatcher(this);
     watcher->addPath(QString::fromLatin1(inputDirectory));
@@ -243,6 +263,16 @@ void Controller::start() {
     dumpTimer->setSingleShot(true);
     dumpTimer->setInterval(dumpDelayMs);
     connect(dumpTimer, SIGNAL(timeout()), this, SLOT(dumpLog()));
+    connectTimer = new QTimer(this);
+    connectTimer->setSingleShot(true);
+    connect(connectTimer, SIGNAL(timeout()), this, SLOT(connectTick()));
+    // Qt's monotonic clock stops during suspend; the wall clock jumping ahead
+    // between two ticks means the Kobo just woke up.
+    wakeTimer = new QTimer(this);
+    wakeTimer->setInterval(wakeTickMs);
+    connect(wakeTimer, SIGNAL(timeout()), this, SLOT(wakeTick()));
+    wakeClock = long(time(0));
+    wakeTimer->start();
 
     // Only ever observe the Bluetooth service. A method call to a name that
     // is not running makes D-Bus launch the daemon, and a daemon started that
@@ -381,9 +411,11 @@ void Controller::setPowered(bool value) {
     if (value) {
         startBindBurst();
         fallbackTimer->start();
+        startConnectBurst(0);
     } else {
         bindTimer->stop();
         fallbackTimer->stop();
+        connectTimer->stop();
     }
 }
 
@@ -420,6 +452,9 @@ void Controller::bluetoothSignal(const QDBusMessage &message) {
     const QList<QVariant> arguments = message.arguments();
     if (message.member() == QLatin1String("InterfacesAdded")) {
         startBindBurst();
+        if (!arguments.isEmpty() && remotes.contains(arguments.at(0).value<QDBusObjectPath>().path()) &&
+            !remoteOpen())
+            connectNow("appeared");
         return;
     }
     if (arguments.size() < 2)
@@ -434,11 +469,24 @@ void Controller::bluetoothSignal(const QDBusMessage &message) {
         nh_log("touchremote: adapter changed: %s", QStringList(changed.keys()).join(",").toLatin1().constData());
         if (changed.contains(QStringLiteral("Powered")))
             setPowered(changed.value(QStringLiteral("Powered")).toBool());
-    } else if (interface == QLatin1String("org.bluez.Device1") && changed.contains(QStringLiteral("Connected"))) {
-        if (changed.value(QStringLiteral("Connected")).toBool()) {
-            nh_log("touchremote: a Bluetooth device connected");
-            reloadSettings();
-            startBindBurst();
+    } else if (interface == QLatin1String("org.bluez.Device1")) {
+        const QString path = message.path();
+        if (changed.contains(QStringLiteral("Connected"))) {
+            if (changed.value(QStringLiteral("Connected")).toBool()) {
+                nh_log("touchremote: %s connected", path.toLatin1().constData());
+                lastConnectedPath = path;
+                lastConnectedAt.start();
+                if (remoteOpen() && lastRemoteOpenedAt.isValid() && lastRemoteOpenedAt.elapsed() < 60000)
+                    rememberRemote(path);
+                reloadSettings();
+                startBindBurst();
+            } else if (remotes.contains(path)) {
+                nh_log("touchremote: %s disconnected", path.toLatin1().constData());
+                startConnectBurst(2);
+            }
+        } else if (changed.contains(QStringLiteral("RSSI")) && remotes.contains(path) && !remoteOpen()) {
+            // Nickel's settings page is scanning and sees a known remote.
+            connectNow("seen in a scan");
         }
     }
 }
@@ -500,6 +548,13 @@ void Controller::scanInputDevices() {
                 nh_log("touchremote: cannot grab %s (%s)", path.toLatin1().constData(), strerror(errno));
         }
         devices.append(new Device(this, path, fd, QString::fromUtf8(name), touch, grabbed));
+        if (touch) {
+            // The Device1 that reported Connected just before is this remote.
+            if (lastConnectedAt.isValid() && lastConnectedAt.elapsed() < 60000)
+                rememberRemote(lastConnectedPath);
+            lastRemoteOpenedAt.start();
+            connectTimer->stop();
+        }
         armDumpLog();
     }
     closedir(dir);
@@ -508,6 +563,103 @@ void Controller::scanInputDevices() {
 void Controller::deviceLost(Device *device) {
     devices.removeAll(device);
     device->deleteLater();
+    if (!remoteOpen())
+        startConnectBurst(2);
+}
+
+// --- auto-connect
+
+void Controller::loadRemotes() {
+    QFile file(QString::fromLatin1(remotesFile));
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
+        return;
+    foreach (const QByteArray &line, file.readAll().split('\n')) {
+        const QString path = QString::fromLatin1(line).trimmed();
+        if (path.startsWith('/') && !remotes.contains(path))
+            remotes.append(path);
+    }
+    if (!remotes.isEmpty())
+        nh_log("touchremote: last remote %s", remotes.last().toLatin1().constData());
+}
+
+void Controller::rememberRemote(const QString &path) {
+    if (path.isEmpty() || (!remotes.isEmpty() && remotes.last() == path))
+        return;
+    remotes.removeAll(path);
+    remotes.append(path);
+    QFile file(QString::fromLatin1(remotesFile));
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
+        nh_log("touchremote: cannot write %s", remotesFile);
+        return;
+    }
+    foreach (const QString &remote, remotes)
+        file.write((remote + "\n").toLatin1());
+    file.close();
+    nh_log("touchremote: remembered remote %s", path.toLatin1().constData());
+}
+
+bool Controller::remoteOpen() const {
+    foreach (Device *device, devices)
+        if (device->isTouch())
+            return true;
+    return false;
+}
+
+void Controller::startConnectBurst(int attemptsDone) {
+    if (!config.autoConnect || !powered || remotes.isEmpty() || remoteOpen())
+        return;
+    connectAttempts = attemptsDone;
+    if (!connectTimer->isActive() || connectAttempts == 0)
+        connectTimer->start(0);
+}
+
+void Controller::connectTick() {
+    if (!config.autoConnect || !powered || remotes.isEmpty() || remoteOpen())
+        return;
+    if (lastAttempt.isValid() && lastAttempt.elapsed() < connectMinSpacingMs) {
+        connectTimer->start(connectMinSpacingMs - int(lastAttempt.elapsed()));
+        return;
+    }
+    ++connectAttempts;
+    connectNow(connectAttempts <= connectBurstAttempts ? "burst" : "slow");
+    connectTimer->start(connectAttempts < connectBurstAttempts ? connectBurstIntervalMs : connectSlowIntervalMs);
+}
+
+// Ask the daemon to connect the most recently used remote. Only while the
+// adapter is powered, so the service is running and the call cannot start it.
+void Controller::connectNow(const char *reason) {
+    if (!config.autoConnect || !powered || remotes.isEmpty())
+        return;
+    if (lastAttempt.isValid() && lastAttempt.elapsed() < connectMinSpacingMs)
+        return;
+    const QString path = remotes.last();
+    nh_log("touchremote: connecting %s (%s)", path.toLatin1().constData(), reason);
+    lastAttempt.start();
+    QDBusMessage request =
+        QDBusMessage::createMethodCall(service, path, QStringLiteral("org.bluez.Device1"), QStringLiteral("Connect"));
+    QDBusPendingCallWatcher *watcher =
+        new QDBusPendingCallWatcher(QDBusConnection::systemBus().asyncCall(request, 30000), this);
+    connect(watcher, SIGNAL(finished(QDBusPendingCallWatcher*)), this,
+            SLOT(connectFinished(QDBusPendingCallWatcher*)));
+}
+
+void Controller::connectFinished(QDBusPendingCallWatcher *watcher) {
+    const QDBusPendingReply<> reply = *watcher;
+    watcher->deleteLater();
+    if (reply.isError())
+        nh_log("touchremote: connect: %s", reply.error().message().toUtf8().constData());
+    else
+        nh_log("touchremote: connect call returned");
+}
+
+void Controller::wakeTick() {
+    const long now = long(time(0));
+    if (wakeClock && now - wakeClock > wakeGapSeconds) {
+        nh_log("touchremote: woke up");
+        if (!remoteOpen())
+            startConnectBurst(0);
+    }
+    wakeClock = now;
 }
 
 // --- actions

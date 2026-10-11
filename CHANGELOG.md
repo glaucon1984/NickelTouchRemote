@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Auto-connect: the last used remote is connected by the mod itself whenever Bluetooth
+  is on and no remote is connected, with quick attempts right after Bluetooth comes on
+  or the Kobo wakes, slower ones afterwards, and an immediate one when Nickel's settings
+  page sees the remote in a scan. `auto_connect = false` disables it.
+
 ## v0.1.0 (2026-10-11)
 
 First release.

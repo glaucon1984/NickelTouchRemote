@@ -75,6 +75,17 @@ Two ways to read with the ring in the other hand:
 
 Set `tap = invert` in the configuration to get the second behaviour.
 
+The mod also connects the ring by itself. Nickel only connects a remote when you pick it
+on its Bluetooth settings page, and the ring does not initiate the connection either. So
+whenever Bluetooth is on and no remote is connected, the mod asks the Bluetooth daemon to
+connect the last remote it used: right away when Bluetooth comes on or the Kobo wakes
+from sleep, then every 20 seconds for the first attempts and every minute after that,
+and immediately when Nickel's settings page sees the ring in a scan. Switch the ring on
+and it is connected a few seconds later. Nickel's own Bluetooth timeout still switches
+the radio off when nothing is connected for a while, as before. `auto_connect = false`
+turns this off. With two rings, the mod reconnects the one used last; pick the other one
+on the settings page once and it becomes the last one.
+
 While the ring is in use, the mod tells Nickel that a Bluetooth remote is active, so
 Nickel's Bluetooth inactivity timer does not switch the radio off mid-chapter, and it
 reports the presses as activity so the Kobo does not fall asleep while you read with the
@@ -106,6 +117,7 @@ grab_touch_devices = true   ; keep touch-style remotes away from Nickel (leave o
 grab_other_devices = false  ; also take keyboard-style remotes (only with [keys])
 inject = keys               ; keys: arrow keys; view: call Nickel's reader directly
 power_activity = true       ; count presses as activity for Nickel's sleep timer
+auto_connect = true         ; reconnect the last used remote by ourselves
 verbose = false             ; log every raw input event
 ```
 
@@ -174,7 +186,10 @@ then be deleted.
   again at every start, so a known remote gets its input node from the kernel on its
   own. Bluetooth connection and power changes are followed over D-Bus (the `org.bluez`
   interfaces, served by Kobo's bluedroid bridge on MediaTek devices) without ever
-  activating the daemon, which Nickel must start itself. Page turns post Nickel's
+  activating the daemon, which Nickel must start itself. The remotes seen connected are
+  remembered in `.adds/touchremote/remotes`, and the last one is reconnected with
+  `Device1.Connect` while Bluetooth is on and nothing is connected; a wall-clock jump
+  between two timer ticks detects a wake from sleep. Page turns post Nickel's
   Bluetooth heartbeat event and a power-manager activity event; `invert` uses the same
   platform call as Nickel's and Kobalt's rotation.
 - `src/main.cc` is the NickelHook registration. Every Nickel symbol is optional; a missing

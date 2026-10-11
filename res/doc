@@ -13,6 +13,8 @@ Files in this folder (KOBOeReader/.adds/touchremote):
                      middle = swap the two (switch hands). Set "tap = invert"
                      to turn the screen upside down instead; page turns
                      follow the screen.
+  remotes            Bluetooth device paths of remotes seen connected, most
+                     recent last; the mod reconnects the last one by itself.
   devices            Bluetooth HID ids the mod has bound to the kernel's
                      generic HID driver. Written automatically.
   uninstall          Create this file (empty) and restart the reader to

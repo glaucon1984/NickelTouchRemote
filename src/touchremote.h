@@ -41,6 +41,7 @@ struct Settings {
     bool grabOtherDevices;    // take every other Bluetooth input device too
     bool viewMethods;         // call Nickel's ReadingView instead of sending keys
     bool powerActivity;       // report activity to Nickel's PowerManager
+    bool autoConnect;         // connect the last remote ourselves when Bluetooth is on
     bool verbose;             // log every raw input event
 
     Settings();
@@ -59,6 +60,7 @@ public:
     ~Device();
     QString path() const { return devicePath; }
     QString name() const { return deviceName; }
+    bool isTouch() const { return touch; }
 
 private slots:
     void readable();
@@ -98,6 +100,9 @@ private slots:
     void serviceOwnerChanged(const QString &service, const QString &previous, const QString &owner);
     void adapterQueryFinished(QDBusPendingCallWatcher *watcher);
     void dumpLog();
+    void connectTick();
+    void connectFinished(QDBusPendingCallWatcher *watcher);
+    void wakeTick();
 
 private:
     void reloadSettings();
@@ -114,6 +119,11 @@ private:
     void heartbeat();
     void reportActivity();
     void armDumpLog();
+    void loadRemotes();
+    void rememberRemote(const QString &path);
+    bool remoteOpen() const;
+    void startConnectBurst(int attemptsDone);
+    void connectNow(const char *reason);
 
     Settings config;
     QList<Device *> devices;
@@ -123,6 +133,15 @@ private:
     QTimer *bindTimer;
     QTimer *fallbackTimer;
     QTimer *dumpTimer;
+    QTimer *connectTimer;
+    QTimer *wakeTimer;
+    QStringList remotes;         // Device1 paths of remotes seen connected, most recent last
+    QString lastConnectedPath;   // most recent Device1 that reported Connected
+    QElapsedTimer lastConnectedAt;
+    QElapsedTimer lastRemoteOpenedAt;  // the daemon may report Connected after the node appears
+    QElapsedTimer lastAttempt;
+    int connectAttempts;
+    long wakeClock;
     int bindTicks;
     bool started;
     bool powered;
