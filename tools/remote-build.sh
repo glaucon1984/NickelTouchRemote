@@ -13,8 +13,10 @@ cd "$root"
 tar czf - --exclude=./.git --exclude=./build --exclude='*.o' --exclude='*.moc' --exclude='*.so' \
     --exclude=KoboRoot.tgz --exclude=tests/gesture_test . |
     ssh "$host" "rm -rf $remote && mkdir -p $remote && tar xzf - -C $remote"
-ssh "$host" "cd $remote && docker run --rm -v \"\$PWD:/src\" -w /src ghcr.io/pgaskin/nickeltc:1.0 \
-    make -j\$(nproc) VERSION=$version $targets"
+# One make per target: NickelHook's strip and koboroot do not depend on the library.
+for target in $targets; do
+    ssh "$host" "cd $remote && docker run --rm -v \"\$PWD:/src\" -w /src ghcr.io/pgaskin/nickeltc:1.0 make -j\$(nproc) VERSION=$version $target"
+done
 mkdir -p build
 case " $targets " in
 *" koboroot "*)

@@ -41,7 +41,8 @@ struct Settings {
     bool verbose;             // log every raw input event
 
     Settings();
-    void load(const QString &file);
+    // Returns false and leaves the defaults when the file does not exist.
+    bool load(const QString &file);
     Action forGesture(Gesture gesture) const;
 };
 

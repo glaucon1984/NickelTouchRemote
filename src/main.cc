@@ -59,42 +59,34 @@ int init() {
     return 0;
 }
 
+// GCC 4.9 accepts designated initializers in C++ only when every field is
+// listed in order, so these tables are positional: see NickelHook.h.
 struct nh_info info = {
-    .name = "NickelTouchRemote",
-    .desc = "Turn pages with touch-screen style Bluetooth remotes",
-    .uninstall_flag = TR_CONFIG_DIR "/uninstall",
-    .failsafe_delay = 5,
+    "NickelTouchRemote",                                     // name
+    "Turn pages with touch-screen style Bluetooth remotes",  // desc
+    TR_CONFIG_DIR "/uninstall",                              // uninstall_flag
+    0,                                                       // uninstall_xflag
+    5,                                                       // failsafe_delay
 };
 
 struct nh_hook hooks[] = {
     {0},
 };
 
+// name, out, desc, optional
 struct nh_dlsym symbols[] = {
-    {.name = "_ZN23BluetoothHeartbeatEvent9eventTypeEv",
-     .out = nh_symoutptr(touchremote::nickel::bluetoothHeartbeatEventType),
-     .desc = "Keep Nickel's Bluetooth radio on while the remote is used",
-     .optional = true},
-    {.name = "_ZN9TimeEvent9eventTypeEv",
-     .out = nh_symoutptr(touchremote::nickel::timeEventType),
-     .desc = "Activity event for Nickel's power manager",
-     .optional = true},
-    {.name = "_ZN12PowerManager14sharedInstanceEv",
-     .out = nh_symoutptr(touchremote::nickel::powerManagerSharedInstance),
-     .desc = "Nickel's power manager",
-     .optional = true},
-    {.name = "_ZN12PowerManager6filterEP7QObjectP6QEvent",
-     .out = nh_symoutptr(touchremote::nickel::powerManagerFilter),
-     .desc = "Reset Nickel's inactivity timer",
-     .optional = true},
-    {.name = "_ZN20MainWindowController14sharedInstanceEv",
-     .out = nh_symoutptr(touchremote::nickel::mainWindowControllerSharedInstance),
-     .desc = "Nickel's main window controller",
-     .optional = true},
-    {.name = "_ZNK20MainWindowController11currentViewEv",
-     .out = nh_symoutptr(touchremote::nickel::mainWindowControllerCurrentView),
-     .desc = "Nickel's current view, for the optional view page-turn method",
-     .optional = true},
+    {"_ZN23BluetoothHeartbeatEvent9eventTypeEv", nh_symoutptr(touchremote::nickel::bluetoothHeartbeatEventType),
+     "Keep Nickel's Bluetooth radio on while the remote is used", true},
+    {"_ZN9TimeEvent9eventTypeEv", nh_symoutptr(touchremote::nickel::timeEventType),
+     "Activity event for Nickel's power manager", true},
+    {"_ZN12PowerManager14sharedInstanceEv", nh_symoutptr(touchremote::nickel::powerManagerSharedInstance),
+     "Nickel's power manager", true},
+    {"_ZN12PowerManager6filterEP7QObjectP6QEvent", nh_symoutptr(touchremote::nickel::powerManagerFilter),
+     "Reset Nickel's inactivity timer", true},
+    {"_ZN20MainWindowController14sharedInstanceEv",
+     nh_symoutptr(touchremote::nickel::mainWindowControllerSharedInstance), "Nickel's main window controller", true},
+    {"_ZNK20MainWindowController11currentViewEv", nh_symoutptr(touchremote::nickel::mainWindowControllerCurrentView),
+     "Nickel's current view, for the optional view page-turn method", true},
     {0},
 };
 
@@ -105,4 +97,5 @@ NickelHook(
     .info = &info,
     .hook = hooks,
     .dlsym = symbols,
+    .uninstall = 0,
 )

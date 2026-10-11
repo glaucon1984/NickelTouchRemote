@@ -95,10 +95,10 @@ Settings::Settings()
       swipeRight(ActionNone), swapWhenInverted(true), grabTouchDevices(true), grabOtherDevices(false),
       viewMethods(false), powerActivity(true), verbose(false) {}
 
-void Settings::load(const QString &file) {
+bool Settings::load(const QString &file) {
     *this = Settings();
     if (!QFile::exists(file))
-        return;
+        return false;
     QSettings settings(file, QSettings::IniFormat);
     settings.beginGroup("gestures");
     tap = parseAction(settings.value("tap", "swap").toString());
@@ -126,6 +126,7 @@ void Settings::load(const QString &file) {
     powerActivity = settings.value("power_activity", true).toBool();
     verbose = settings.value("verbose", false).toBool();
     settings.endGroup();
+    return true;
 }
 
 Action Settings::forGesture(Gesture gesture) const {
@@ -250,8 +251,12 @@ void Controller::start() {
     scanInputDevices();
 }
 
+// Keeps the current settings when the file is unreachable, as during a USB
+// connection, and the defaults when it was never created.
 void Controller::reloadSettings() {
-    config.load(QString::fromLatin1(configFile));
+    Settings fresh;
+    if (fresh.load(QString::fromLatin1(configFile)))
+        config = fresh;
     nh_log("touchremote: config tap=%s up=%s down=%s left=%s right=%s keys=%d swap_when_inverted=%d grab=%d/%d "
            "inject=%s",
            actionName(config.tap), actionName(config.swipeUp), actionName(config.swipeDown),
