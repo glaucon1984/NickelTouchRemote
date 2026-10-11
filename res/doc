@@ -10,14 +10,16 @@ Files in this folder (KOBOeReader/.adds/touchremote):
                      button actions or options.
   config.ini         Your settings (optional). Defaults match the WX02 ring:
                      lower button = next page, upper = previous page,
-                     middle = swap the two (switch hands).
+                     middle = swap the two (switch hands). Set "tap = invert"
+                     to turn the screen upside down instead; page turns
+                     follow the screen.
   devices            Bluetooth HID ids the mod has bound to the kernel's
                      generic HID driver. Written automatically.
   uninstall          Create this file (empty) and restart the reader to
                      remove the mod.
   dumplog            Create this file (empty), then connect the remote and
                      press its buttons for a minute. The system log is then
-                     copied to KOBOeReader/.kobo/NickelTouchRemote_<date>.log
+                     copied to KOBOeReader/NickelTouchRemote_<date>.log
                      and the flag is removed.
 
 Pair and connect the remote in Nickel's Bluetooth settings as usual. The mod

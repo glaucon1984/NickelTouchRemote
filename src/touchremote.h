@@ -15,6 +15,7 @@
 
 class QDBusPendingCallWatcher;
 class QDBusServiceWatcher;
+class QScreen;
 class QFileSystemWatcher;
 class QSocketNotifier;
 class QTimer;
@@ -25,7 +26,8 @@ enum Action {
     ActionNone = 0,
     ActionNext,
     ActionPrev,
-    ActionSwap  // exchange the next/previous actions until the next swap
+    ActionSwap,   // exchange the next/previous actions until the next swap
+    ActionInvert  // turn the screen upside down (and back)
 };
 
 const char *actionName(Action action);
@@ -106,6 +108,8 @@ private:
     void setPowered(bool value);
     void queryAdapter();
     bool sendPageKey(int direction);
+    void invertScreen();
+    void turnScreen(QScreen *screen, Qt::ScreenOrientation orientation);
     bool turnNickelPage(int direction);
     void heartbeat();
     void reportActivity();

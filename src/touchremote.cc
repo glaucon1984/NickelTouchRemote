@@ -21,6 +21,7 @@
 #include <QDBusServiceWatcher>
 #include <QDBusConnectionInterface>
 #include <QDBusVariant>
+#include <QEventLoop>
 #include <QFile>
 #include <QFileSystemWatcher>
 #include <QGuiApplication>
@@ -31,6 +32,7 @@
 #include <QTimer>
 #include <QWidget>
 #include <QWindow>
+#include <qpa/qwindowsysteminterface.h>
 
 #include "nickel.h"
 
@@ -73,6 +75,7 @@ const char *actionName(Action action) {
     case ActionNext: return "next";
     case ActionPrev: return "prev";
     case ActionSwap: return "swap";
+    case ActionInvert: return "invert";
     default: return "none";
     }
 }
@@ -85,6 +88,8 @@ Action parseAction(const QString &text) {
         return ActionPrev;
     if (value == "swap")
         return ActionSwap;
+    if (value == "invert" || value == "rotate")
+        return ActionInvert;
     if (!value.isEmpty() && value != "none")
         nh_log("touchremote: unknown action '%s', using none", value.toUtf8().constData());
     return ActionNone;
@@ -513,6 +518,12 @@ void Controller::perform(Action action, const QString &source) {
         swapped = !swapped;
         nh_log("touchremote: %s swapped page turns %s", source.toUtf8().constData(), swapped ? "on" : "off");
         return;
+    case ActionInvert:
+        invertScreen();
+        heartbeat();
+        if (config.powerActivity)
+            reportActivity();
+        return;
     case ActionNext:
     case ActionPrev: {
         int direction = action == ActionNext ? 1 : -1;
@@ -560,6 +571,48 @@ bool Controller::sendPageKey(int direction) {
     QCoreApplication::sendEvent(target, &press);
     QCoreApplication::sendEvent(target, &release);
     return true;
+}
+
+// Turn the screen upside down, or back. With swap_when_inverted on, the
+// page-turn directions follow, so the same ring button keeps turning forward
+// when the reader is held the other way round.
+void Controller::invertScreen() {
+    QScreen *screen = QGuiApplication::primaryScreen();
+    if (!screen)
+        return;
+    Qt::ScreenOrientation current = screen->orientation();
+    if (current == Qt::PrimaryOrientation)
+        current = screen->primaryOrientation();
+    Qt::ScreenOrientation target;
+    switch (current) {
+    case Qt::PortraitOrientation: target = Qt::InvertedPortraitOrientation; break;
+    case Qt::InvertedPortraitOrientation: target = Qt::PortraitOrientation; break;
+    case Qt::LandscapeOrientation: target = Qt::InvertedLandscapeOrientation; break;
+    case Qt::InvertedLandscapeOrientation: target = Qt::LandscapeOrientation; break;
+    default: return;
+    }
+    nh_log("touchremote: turning the screen from %d to %d", int(current), int(target));
+    turnScreen(screen, target);
+}
+
+// The same call Nickel's rotation (and Kobalt's) makes: the Kobo platform
+// plugin rotates the framebuffer when the screen orientation changes. Qt 5
+// drops an orientation outside the screen's update mask, which Nickel narrows
+// outside its reader, so widen the mask while the screen is turned and give
+// Nickel's mask back once the screen is in an orientation it allowed.
+void Controller::turnScreen(QScreen *screen, Qt::ScreenOrientation orientation) {
+    if (screen->orientation() == orientation)
+        return;
+    static Qt::ScreenOrientations nickelMask;
+    static bool widened = false;
+    if (!widened)
+        nickelMask = screen->orientationUpdateMask();
+    widened = !(nickelMask & orientation);
+    screen->setOrientationUpdateMask(nickelMask | orientation);
+    QWindowSystemInterface::handleScreenOrientationChange(screen, orientation);
+    QWindowSystemInterface::flushWindowSystemEvents(QEventLoop::ExcludeUserInputEvents);
+    if (!widened)
+        screen->setOrientationUpdateMask(nickelMask);
 }
 
 // Optional: call Nickel's own reading view directly (as kobo-btpt does).

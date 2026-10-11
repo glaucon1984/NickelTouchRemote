@@ -10,6 +10,12 @@ ifeq ($(TR_CONFIG_DIR),)
 override TR_CONFIG_DIR := /mnt/onboard/.adds/touchremote
 endif
 override CPPFLAGS += -Isrc -DTR_CONFIG_DIR='"$(TR_CONFIG_DIR)"'
+# Screen rotation uses Qt's platform interface, a private header under
+# <includedir>/QtGui/<version>/QtGui/qpa. Exported from libQt5Gui, so no
+# private library is linked.
+override QTGUI_INCLUDE := $(patsubst -I%,%,$(firstword $(shell $(PKG_CONFIG) --cflags-only-I Qt5Gui)))
+override QTGUI_VERSION := $(shell $(PKG_CONFIG) --modversion Qt5Gui)
+override CXXFLAGS += -I$(QTGUI_INCLUDE)/$(QTGUI_VERSION) -I$(QTGUI_INCLUDE)/$(QTGUI_VERSION)/QtGui
 override KOBOROOT += res/doc:$(TR_CONFIG_DIR)/doc res/config.sample.ini:$(TR_CONFIG_DIR)/config.sample.ini
 
 override SKIPCONFIGURE += strip test

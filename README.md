@@ -45,8 +45,12 @@ package for it.
 | upper | swipe towards smaller Y (`swipe_up`) | previous page |
 | middle | tap | swap next and previous (switch hands) |
 
-Page turns are also swapped automatically while the screen is upside down, for readers
-that rotate (Kobalt's manual rotation on the Clara, for instance).
+Set `tap = invert` instead to turn the whole screen upside down with the middle button,
+the way "invert rotation" works in KOReader: the reader can then be held with either
+hand and the ring's lower button keeps turning forward, because page turns are swapped
+automatically while the screen is upside down. The rotation uses the same platform call
+as Nickel's own rotation and Kobalt's, so it works in both readers and stays until the
+next press. Kobalt restores its own orientation setting when a book is opened or closed.
 
 ## Configuration
 
@@ -54,7 +58,7 @@ Copy `.adds/touchremote/config.sample.ini` to `config.ini` and edit it. The samp
 documents every key. In short:
 
 - `[gestures]`: the action for `tap`, `swipe_up`, `swipe_down`, `swipe_left` and
-  `swipe_right`. Actions are `next`, `prev`, `swap` and `none`.
+  `swipe_right`. Actions are `next`, `prev`, `swap`, `invert` and `none`.
 - `[keys]`: actions for plain key codes, for remotes that send keys rather than touches.
 - `[options]`: `swap_when_inverted`, `grab_touch_devices`, `grab_other_devices`, `inject`
   (`keys` or `view`), `power_activity` and `verbose`.
@@ -66,7 +70,7 @@ the remote off and on applies a change.
 
 Create an empty file `dumplog` in `.adds/touchremote`, then connect the remote and press
 its buttons for a minute. The mod copies the system log to
-`.kobo/NickelTouchRemote_<date>.log` and removes the flag. Set `verbose = true` first to
+`NickelTouchRemote_<date>.log` in the drive's root and removes the flag. Set `verbose = true` first to
 include every raw input event, which shows what an unknown remote sends.
 
 ## How it works
