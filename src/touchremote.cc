@@ -18,6 +18,8 @@
 #include <QDBusConnection>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
+#include <QDBusServiceWatcher>
+#include <QDBusConnectionInterface>
 #include <QDBusVariant>
 #include <QFile>
 #include <QFileSystemWatcher>
@@ -209,9 +211,8 @@ Controller::Controller()
     // Firmware 4 on MediaTek devices runs Kobo's bluedroid bridge under its own
     // bus name; other devices and firmware 5+ use BlueZ's. Both speak the
     // org.bluez interfaces.
-    services << QStringLiteral("org.bluez");
-    if (qgetenv("PLATFORM") == "mt8113t-ntx")
-        services << QStringLiteral("com.kobo.mtk.bluedroid");
+    service = qgetenv("PLATFORM") == "mt8113t-ntx" ? QStringLiteral("com.kobo.mtk.bluedroid")
+                                                   : QStringLiteral("org.bluez");
 }
 
 void Controller::start() {
@@ -238,14 +239,24 @@ void Controller::start() {
     dumpTimer->setInterval(dumpDelayMs);
     connect(dumpTimer, SIGNAL(timeout()), this, SLOT(dumpLog()));
 
+    // Only ever observe the Bluetooth service. A method call to a name that
+    // is not running makes D-Bus launch the daemon, and a daemon started that
+    // way, before Nickel powers the radio, leaves Nickel with a dead adapter.
+    // Match rules and the service watcher never activate anything.
     QDBusConnection bus = QDBusConnection::systemBus();
-    foreach (const QString &service, services) {
-        bus.connect(service, QString(), QStringLiteral("org.freedesktop.DBus.Properties"),
-                    QStringLiteral("PropertiesChanged"), this, SLOT(bluetoothSignal(QDBusMessage)));
-        bus.connect(service, QString(), QStringLiteral("org.freedesktop.DBus.ObjectManager"),
-                    QStringLiteral("InterfacesAdded"), this, SLOT(bluetoothSignal(QDBusMessage)));
-        queryAdapter(service);
-    }
+    bus.connect(service, QString(), QStringLiteral("org.freedesktop.DBus.Properties"),
+                QStringLiteral("PropertiesChanged"), this, SLOT(bluetoothSignal(QDBusMessage)));
+    bus.connect(service, QString(), QStringLiteral("org.freedesktop.DBus.ObjectManager"),
+                QStringLiteral("InterfacesAdded"), this, SLOT(bluetoothSignal(QDBusMessage)));
+    QDBusServiceWatcher *serviceWatcher =
+        new QDBusServiceWatcher(service, bus, QDBusServiceWatcher::WatchForOwnerChange, this);
+    connect(serviceWatcher, SIGNAL(serviceOwnerChanged(QString,QString,QString)), this,
+            SLOT(serviceOwnerChanged(QString,QString,QString)));
+    const bool running = bus.interface() && bus.interface()->isServiceRegistered(service);
+    nh_log("touchremote: Bluetooth service %s is %s", service.toLatin1().constData(),
+           running ? "running" : "not running");
+    if (running)
+        queryAdapter();
 
     bindUnclaimedHidDevices();
     scanInputDevices();
@@ -371,7 +382,16 @@ void Controller::setPowered(bool value) {
     }
 }
 
-void Controller::queryAdapter(const QString &service) {
+void Controller::serviceOwnerChanged(const QString &, const QString &, const QString &owner) {
+    nh_log("touchremote: Bluetooth service %s", owner.isEmpty() ? "stopped" : "started");
+    if (owner.isEmpty())
+        setPowered(false);
+    else
+        queryAdapter();
+}
+
+// Called only while the service has an owner, so it cannot activate it.
+void Controller::queryAdapter() {
     QDBusMessage request = QDBusMessage::createMethodCall(service, QString::fromLatin1(adapterPath),
                                                           QStringLiteral("org.freedesktop.DBus.Properties"),
                                                           QStringLiteral("Get"));
@@ -405,8 +425,10 @@ void Controller::bluetoothSignal(const QDBusMessage &message) {
         changed = qdbus_cast<QVariantMap>(arguments.at(1).value<QDBusArgument>());
     else
         changed = arguments.at(1).toMap();
-    if (interface == QLatin1String("org.bluez.Adapter1") && changed.contains(QStringLiteral("Powered"))) {
-        setPowered(changed.value(QStringLiteral("Powered")).toBool());
+    if (interface == QLatin1String("org.bluez.Adapter1")) {
+        nh_log("touchremote: adapter changed: %s", QStringList(changed.keys()).join(",").toLatin1().constData());
+        if (changed.contains(QStringLiteral("Powered")))
+            setPowered(changed.value(QStringLiteral("Powered")).toBool());
     } else if (interface == QLatin1String("org.bluez.Device1") && changed.contains(QStringLiteral("Connected"))) {
         if (changed.value(QStringLiteral("Connected")).toBool()) {
             nh_log("touchremote: a Bluetooth device connected");

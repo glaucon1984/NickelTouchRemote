@@ -14,6 +14,7 @@
 #include "gesture.h"
 
 class QDBusPendingCallWatcher;
+class QDBusServiceWatcher;
 class QFileSystemWatcher;
 class QSocketNotifier;
 class QTimer;
@@ -92,6 +93,7 @@ private slots:
     void bindTick();
     void fallbackTick();
     void bluetoothSignal(const QDBusMessage &message);
+    void serviceOwnerChanged(const QString &service, const QString &previous, const QString &owner);
     void adapterQueryFinished(QDBusPendingCallWatcher *watcher);
     void dumpLog();
 
@@ -102,7 +104,7 @@ private:
     bool writeNewId(const QString &id);
     void startBindBurst();
     void setPowered(bool value);
-    void queryAdapter(const QString &service);
+    void queryAdapter();
     bool sendPageKey(int direction);
     bool turnNickelPage(int direction);
     void heartbeat();
@@ -112,7 +114,7 @@ private:
     Settings config;
     QList<Device *> devices;
     QSet<QString> knownIds;
-    QStringList services;
+    QString service;
     QFileSystemWatcher *watcher;
     QTimer *bindTimer;
     QTimer *fallbackTimer;
