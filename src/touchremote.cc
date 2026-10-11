@@ -452,9 +452,9 @@ void Controller::bluetoothSignal(const QDBusMessage &message) {
     const QList<QVariant> arguments = message.arguments();
     if (message.member() == QLatin1String("InterfacesAdded")) {
         startBindBurst();
-        if (!arguments.isEmpty() && remotes.contains(arguments.at(0).value<QDBusObjectPath>().path()) &&
-            !remoteOpen())
-            connectNow("appeared");
+        const QString added = arguments.isEmpty() ? QString() : arguments.at(0).value<QDBusObjectPath>().path();
+        if (remotes.contains(added) && !remoteOpen())
+            connectNow(added, "appeared");
         return;
     }
     if (arguments.size() < 2)
@@ -486,7 +486,7 @@ void Controller::bluetoothSignal(const QDBusMessage &message) {
             }
         } else if (changed.contains(QStringLiteral("RSSI")) && remotes.contains(path) && !remoteOpen()) {
             // Nickel's settings page is scanning and sees a known remote.
-            connectNow("seen in a scan");
+            connectNow(path, "seen in a scan");
         }
     }
 }
@@ -621,18 +621,18 @@ void Controller::connectTick() {
         return;
     }
     ++connectAttempts;
-    connectNow(connectAttempts <= connectBurstAttempts ? "burst" : "slow");
+    connectNow(remotes.last(), connectAttempts <= connectBurstAttempts ? "burst" : "slow");
     connectTimer->start(connectAttempts < connectBurstAttempts ? connectBurstIntervalMs : connectSlowIntervalMs);
 }
 
-// Ask the daemon to connect the most recently used remote. Only while the
-// adapter is powered, so the service is running and the call cannot start it.
-void Controller::connectNow(const char *reason) {
-    if (!config.autoConnect || !powered || remotes.isEmpty())
+// Ask the daemon to connect a known remote: the most recently used one from
+// the timer, or the one a scan just saw. Only while the adapter is powered,
+// so the service is running and the call cannot start it.
+void Controller::connectNow(const QString &path, const char *reason) {
+    if (!config.autoConnect || !powered || path.isEmpty())
         return;
     if (lastAttempt.isValid() && lastAttempt.elapsed() < connectMinSpacingMs)
         return;
-    const QString path = remotes.last();
     nh_log("touchremote: connecting %s (%s)", path.toLatin1().constData(), reason);
     lastAttempt.start();
     QDBusMessage request =

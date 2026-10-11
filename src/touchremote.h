@@ -123,7 +123,7 @@ private:
     void rememberRemote(const QString &path);
     bool remoteOpen() const;
     void startConnectBurst(int attemptsDone);
-    void connectNow(const char *reason);
+    void connectNow(const QString &path, const char *reason);
 
     Settings config;
     QList<Device *> devices;

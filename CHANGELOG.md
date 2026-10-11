@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.2.0 (2026-10-11)
 
 - Auto-connect: the last used remote is connected by the mod itself whenever Bluetooth
   is on and no remote is connected, with quick attempts right after Bluetooth comes on
