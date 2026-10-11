@@ -1,0 +1,22 @@
+name: build
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: make test
+  kobo:
+    runs-on: ubuntu-latest
+    container: ghcr.io/pgaskin/nickeltc:1.0
+    steps:
+      - uses: actions/checkout@v4
+      - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - run: make all strip koboroot
+      - uses: actions/upload-artifact@v4
+        with:
+          name: KoboRoot
+          path: KoboRoot.tgz

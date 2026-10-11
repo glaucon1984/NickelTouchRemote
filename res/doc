@@ -1,0 +1,26 @@
+NickelTouchRemote
+=================
+
+Turn pages on a Kobo with touch-screen style Bluetooth remotes ("TikTok
+rings" and similar), in Kobo's own reader and in Kobalt.
+
+Files in this folder (KOBOeReader/.adds/touchremote):
+
+  config.sample.ini  Settings reference. Copy to config.ini to change the
+                     button actions or options.
+  config.ini         Your settings (optional). Defaults match the WX02 ring:
+                     lower button = next page, upper = previous page,
+                     middle = swap the two (switch hands).
+  devices            Bluetooth HID ids the mod has bound to the kernel's
+                     generic HID driver. Written automatically.
+  uninstall          Create this file (empty) and restart the reader to
+                     remove the mod.
+  dumplog            Create this file (empty), then connect the remote and
+                     press its buttons for a minute. The system log is then
+                     copied to KOBOeReader/.kobo/NickelTouchRemote_<date>.log
+                     and the flag is removed.
+
+Pair and connect the remote in Nickel's Bluetooth settings as usual. The mod
+only handles the input side: it gives driverless Bluetooth HID devices to the
+kernel's generic HID driver, reads the simulated finger movements, and sends
+the arrow keys a Bluetooth keyboard would send.

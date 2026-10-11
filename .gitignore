@@ -1,0 +1,12 @@
+/build/
+/KoboRoot.tgz
+*.o
+*.moc
+*.moc.o
+*.so
+/NickelHook/nhplugin.json
+/tests/gesture_test
+.vscode/
+.idea/
+.cache/
+compile_commands.json
