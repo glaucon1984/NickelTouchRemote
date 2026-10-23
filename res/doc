@@ -17,6 +17,8 @@ Files in this folder (KOBOeReader/.adds/touchremote):
                      recent last; the mod reconnects the last one by itself.
   devices            Bluetooth HID ids the mod has bound to the kernel's
                      generic HID driver. Written automatically.
+  repair.sh          Fixes a mod left inert by NickelHook's fail-safe (see the
+                     README); run from a NickelMenu entry, then restart.
   uninstall          Create this file (empty) and restart the reader to
                      remove the mod.
   dumplog            Create this file (empty), then connect the remote and

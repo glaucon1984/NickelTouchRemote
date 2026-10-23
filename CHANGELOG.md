@@ -2,9 +2,12 @@
 
 ## v0.2.1 (2026-10-23)
 
-- NickelHook fail-safe window shortened from 5 to 2 seconds. A Nickel crash inside that
-  window at start-up leaves the library renamed and the mod silently gone until it is
-  reinstalled; the shorter window makes that less likely. README troubleshooting entry.
+- Self-repair after a crash in NickelHook's fail-safe window. A Nickel crash inside that
+  window at start-up leaves the library renamed to `.failsafe`; Qt still loads it but
+  NickelHook refuses to start it, so the mod was silently inert from then on. The mod
+  now puts the file right when it is loaded that way, and the next restart brings it
+  back. The window is also shortened from 5 to 2 seconds, `repair.sh` ships in
+  `.adds/touchremote` for older installs, and the README has a troubleshooting entry.
 
 ## v0.2.0 (2026-10-11)
 

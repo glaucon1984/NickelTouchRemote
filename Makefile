@@ -16,7 +16,7 @@ override CPPFLAGS += -Isrc -DTR_CONFIG_DIR='"$(TR_CONFIG_DIR)"'
 override QTGUI_INCLUDE := $(patsubst -I%,%,$(firstword $(shell $(PKG_CONFIG) --cflags-only-I Qt5Gui)))
 override QTGUI_VERSION := $(shell $(PKG_CONFIG) --modversion Qt5Gui)
 override CXXFLAGS += -I$(QTGUI_INCLUDE)/$(QTGUI_VERSION) -I$(QTGUI_INCLUDE)/$(QTGUI_VERSION)/QtGui
-override KOBOROOT += res/doc:$(TR_CONFIG_DIR)/doc res/config.sample.ini:$(TR_CONFIG_DIR)/config.sample.ini
+override KOBOROOT += res/doc:$(TR_CONFIG_DIR)/doc res/config.sample.ini:$(TR_CONFIG_DIR)/config.sample.ini res/repair.sh:$(TR_CONFIG_DIR)/repair.sh
 
 override SKIPCONFIGURE += strip test
 strip:

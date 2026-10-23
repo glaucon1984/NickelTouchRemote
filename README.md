@@ -185,11 +185,17 @@ Nickel would otherwise handle as well.
   restart of the Kobo brings the radio back.
 - **The mod stopped working altogether** (no auto-connect, buttons do nothing after a
   manual connect) although nothing was changed. NickelHook keeps a mod's library renamed
-  for a couple of seconds at every start and renames it back from a helper thread; if
-  Nickel dies inside that window, after a kernel panic or a hard power-off right at boot,
-  the library stays renamed and the mod never loads again. Reinstalling the package
-  (copy `KoboRoot.tgz` into `.kobo` again) fixes it; settings and learned remotes are
-  kept. The window is 2 seconds since v0.2.1.
+  to `libtouchremote.so.failsafe` for a couple of seconds at every start and renames it
+  back from a helper thread. If Nickel dies inside that window, after a kernel panic or
+  a hard power-off right at boot, the file keeps that name; Qt still loads it, but
+  NickelHook refuses to start a library loaded under its fail-safe name, so the mod sits
+  in memory doing nothing, boot after boot. Since v0.2.1 the mod notices this at load
+  and puts the file right, so one more restart heals it. Older versions: reinstall the
+  package (copy `KoboRoot.tgz` into `.kobo` again), or run `repair.sh` from
+  `.adds/touchremote` through a NickelMenu entry such as
+  `menu_item :main :TouchRemote repair :cmd_output :9000 :sh /mnt/onboard/.adds/touchremote/repair.sh`,
+  then restart. Settings and learned remotes are kept either way. The window itself is
+  2 seconds since v0.2.1.
 - **The screen is upside down and I want it back.** Press the ring's middle button
   again, or set `tap = swap` and reconnect the ring.
 
