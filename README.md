@@ -183,6 +183,13 @@ Nickel would otherwise handle as well.
 - **Bluetooth looks dead after installing a mod** (grey toggle, empty device list). That
   was a bug in the first test build of this mod, fixed before the first release. A
   restart of the Kobo brings the radio back.
+- **The mod stopped working altogether** (no auto-connect, buttons do nothing after a
+  manual connect) although nothing was changed. NickelHook keeps a mod's library renamed
+  for a couple of seconds at every start and renames it back from a helper thread; if
+  Nickel dies inside that window, after a kernel panic or a hard power-off right at boot,
+  the library stays renamed and the mod never loads again. Reinstalling the package
+  (copy `KoboRoot.tgz` into `.kobo` again) fixes it; settings and learned remotes are
+  kept. The window is 2 seconds since v0.2.1.
 - **The screen is upside down and I want it back.** Press the ring's middle button
   again, or set `tap = swap` and reconnect the ring.
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.2.1 (2026-10-23)
+
+- NickelHook fail-safe window shortened from 5 to 2 seconds. A Nickel crash inside that
+  window at start-up leaves the library renamed and the mod silently gone until it is
+  reinstalled; the shorter window makes that less likely. README troubleshooting entry.
+
 ## v0.2.0 (2026-10-11)
 
 - Auto-connect: the last used remote is connected by the mod itself whenever Bluetooth

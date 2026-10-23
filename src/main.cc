@@ -66,7 +66,7 @@ struct nh_info info = {
     "Turn pages with touch-screen style Bluetooth remotes",  // desc
     TR_CONFIG_DIR "/uninstall",                              // uninstall_flag
     0,                                                       // uninstall_xflag
-    5,                                                       // failsafe_delay
+    2,                                                       // failsafe_delay
 };
 
 struct nh_hook hooks[] = {
