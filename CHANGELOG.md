@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.3.0 (2026-10-26)
 
 - Hold the first Bluetooth connection attempt after a wake, or after Bluetooth comes on,
   while Wi-Fi is on, for at most `wifi_hold` seconds (default 30). Bluetooth paging and a
