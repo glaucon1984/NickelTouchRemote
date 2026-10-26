@@ -42,6 +42,7 @@ struct Settings {
     bool viewMethods;         // call Nickel's ReadingView instead of sending keys
     bool powerActivity;       // report activity to Nickel's PowerManager
     bool autoConnect;         // connect the last remote ourselves when Bluetooth is on
+    int wifiHoldSeconds;      // hold connection attempts while Wi-Fi is up, at most this long
     bool verbose;             // log every raw input event
 
     Settings();
@@ -122,6 +123,7 @@ private:
     void loadRemotes();
     void rememberRemote(const QString &path);
     bool remoteOpen() const;
+    bool wifiUp() const;
     void startConnectBurst(int attemptsDone);
     void connectNow(const QString &path, const char *reason);
 
@@ -140,6 +142,7 @@ private:
     QElapsedTimer lastConnectedAt;
     QElapsedTimer lastRemoteOpenedAt;  // the daemon may report Connected after the node appears
     QElapsedTimer lastAttempt;
+    QElapsedTimer wifiHold;      // running while attempts wait for Wi-Fi
     int connectAttempts;
     long wakeClock;
     int bindTicks;

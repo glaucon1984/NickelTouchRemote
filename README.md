@@ -107,6 +107,14 @@ ring does not initiate the connection either. The mod takes that over:
 Nickel's own Bluetooth timeout still switches the radio off when nothing is connected for
 a while, as before. `auto_connect = false` turns the automatic connection off.
 
+Bluetooth and Wi-Fi share the Kobo's radio. Paging for a remote that is switched off
+keeps the Bluetooth side busy for about fifteen seconds, which can make a Wi-Fi transfer
+running at the same time fail, for instance a reading-position sync right after a wake.
+So when Wi-Fi is on, the first attempt after a wake or after Bluetooth comes on waits
+until Wi-Fi goes off again or 30 seconds have passed, whichever comes first; with Wi-Fi
+off the ring still connects within seconds. `wifi_hold` sets that limit in seconds,
+`0` disables the wait.
+
 While the ring is in use, the mod tells Nickel that a Bluetooth remote is active, so
 Nickel's Bluetooth inactivity timer does not switch the radio off mid-chapter, and it
 reports the presses as activity so the Kobo does not fall asleep while you read with the
@@ -139,6 +147,7 @@ grab_other_devices = false  ; also take keyboard-style remotes (only with [keys]
 inject = keys               ; keys: arrow keys; view: call Nickel's reader directly
 power_activity = true       ; count presses as activity for Nickel's sleep timer
 auto_connect = true         ; reconnect the last used remote by ourselves
+wifi_hold = 30              ; wait up to this many seconds while Wi-Fi is on, 0 = no wait
 verbose = false             ; log every raw input event
 ```
 

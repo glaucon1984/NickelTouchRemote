@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Hold the first Bluetooth connection attempt after a wake, or after Bluetooth comes on,
+  while Wi-Fi is on, for at most `wifi_hold` seconds (default 30). Bluetooth paging and a
+  Wi-Fi transfer share the radio, and a reading-position sync right after a wake could
+  fail while the mod was paging for a switched-off ring.
+
 ## v0.2.1 (2026-10-23)
 
 - Self-repair after a crash in NickelHook's fail-safe window. A Nickel crash inside that

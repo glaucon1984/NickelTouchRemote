@@ -114,7 +114,7 @@ Action parseAction(const QString &text) {
 Settings::Settings()
     : tap(ActionSwap), swipeUp(ActionPrev), swipeDown(ActionNext), swipeLeft(ActionNone),
       swipeRight(ActionNone), swapWhenInverted(true), grabTouchDevices(true), grabOtherDevices(false),
-      viewMethods(false), powerActivity(true), autoConnect(true), verbose(false) {}
+      viewMethods(false), powerActivity(true), autoConnect(true), wifiHoldSeconds(30), verbose(false) {}
 
 bool Settings::load(const QString &file) {
     *this = Settings();
@@ -146,6 +146,9 @@ bool Settings::load(const QString &file) {
     viewMethods = settings.value("inject", "keys").toString().trimmed().toLower() == "view";
     powerActivity = settings.value("power_activity", true).toBool();
     autoConnect = settings.value("auto_connect", true).toBool();
+    wifiHoldSeconds = settings.value("wifi_hold", 30).toInt();
+    if (wifiHoldSeconds < 0 || wifiHoldSeconds > 300)
+        wifiHoldSeconds = 30;
     verbose = settings.value("verbose", false).toBool();
     settings.endGroup();
     return true;
@@ -232,6 +235,7 @@ Controller::Controller()
     lastConnectedAt.invalidate();
     lastRemoteOpenedAt.invalidate();
     lastAttempt.invalidate();
+    wifiHold.invalidate();
     // Firmware 4 on MediaTek devices runs Kobo's bluedroid bridge under its own
     // bus name; other devices and firmware 5+ use BlueZ's. Both speak the
     // org.bluez interfaces.
@@ -605,10 +609,17 @@ bool Controller::remoteOpen() const {
     return false;
 }
 
+// Nickel removes the Wi-Fi driver when Wi-Fi is off, so the interface exists
+// only while Wi-Fi is on.
+bool Controller::wifiUp() const {
+    return ::access("/sys/class/net/wlan0", F_OK) == 0;
+}
+
 void Controller::startConnectBurst(int attemptsDone) {
     if (!config.autoConnect || !powered || remotes.isEmpty() || remoteOpen())
         return;
     connectAttempts = attemptsDone;
+    wifiHold.invalidate();
     if (!connectTimer->isActive() || connectAttempts == 0)
         connectTimer->start(0);
 }
@@ -616,6 +627,20 @@ void Controller::startConnectBurst(int attemptsDone) {
 void Controller::connectTick() {
     if (!config.autoConnect || !powered || remotes.isEmpty() || remoteOpen())
         return;
+    // Bluetooth and Wi-Fi share the radio. Paging for a remote while Wi-Fi is
+    // associating or syncing after a wake can make that transfer fail, so the
+    // first attempt of a burst waits while Wi-Fi is up, for a bounded time.
+    if (config.wifiHoldSeconds > 0 && connectAttempts == 0 && wifiUp()) {
+        if (!wifiHold.isValid()) {
+            wifiHold.start();
+            nh_log("touchremote: Wi-Fi is up, holding Bluetooth connection attempts for up to %d s",
+                   config.wifiHoldSeconds);
+        }
+        if (wifiHold.elapsed() < qint64(config.wifiHoldSeconds) * 1000) {
+            connectTimer->start(5000);
+            return;
+        }
+    }
     if (lastAttempt.isValid() && lastAttempt.elapsed() < connectMinSpacingMs) {
         connectTimer->start(connectMinSpacingMs - int(lastAttempt.elapsed()));
         return;
