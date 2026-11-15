@@ -57,6 +57,11 @@ const char *const knownIdsFile = TR_CONFIG_DIR "/devices";
 const char *const dumpLogFlag = TR_CONFIG_DIR "/dumplog";
 const char *const remotesFile = TR_CONFIG_DIR "/remotes";
 const char *const adapterPath = "/org/bluez/hci0";
+const char *const mtkService = "com.kobo.mtk.bluedroid";
+// Always present on the user storage, so it is missing exactly while Nickel
+// has handed the storage to a computer.
+const char *const storageMarker = "/mnt/onboard/.kobo";
+const char *const nickelConfFile = "/mnt/onboard/.kobo/Kobo/Kobo eReader.conf";
 
 const int bindBurstTicks = 25;         // seconds of 1 s bind attempts after a connection
 const int fallbackIntervalMs = 10000;  // slow re-check while Bluetooth is powered
@@ -73,6 +78,12 @@ const int connectSlowIntervalMs = 60000;
 const int connectMinSpacingMs = 15000;
 const int wakeTickMs = 5000;
 const int wakeGapSeconds = 30;
+// Nickel switches Bluetooth off just before it hands the storage to a
+// computer and does not switch it back on afterwards. Bluetooth that went off
+// this shortly before the storage disappeared was switched off for USB.
+const int usbPowerOffWindowMs = 60000;
+const int storageTickMs = 1000;
+const int restoreDelayMs = 5000;
 
 const unsigned longBits = 8 * sizeof(unsigned long);
 
@@ -114,7 +125,8 @@ Action parseAction(const QString &text) {
 Settings::Settings()
     : tap(ActionSwap), swipeUp(ActionPrev), swipeDown(ActionNext), swipeLeft(ActionNone),
       swipeRight(ActionNone), swapWhenInverted(true), grabTouchDevices(true), grabOtherDevices(false),
-      viewMethods(false), powerActivity(true), autoConnect(true), wifiHoldSeconds(30), verbose(false) {}
+      viewMethods(false), powerActivity(true), autoConnect(true), wifiHoldSeconds(30), restoreAfterUsb(true),
+      verbose(false) {}
 
 bool Settings::load(const QString &file) {
     *this = Settings();
@@ -149,7 +161,8 @@ bool Settings::load(const QString &file) {
     wifiHoldSeconds = settings.value("wifi_hold", 30).toInt();
     if (wifiHoldSeconds < 0 || wifiHoldSeconds > 300)
         wifiHoldSeconds = 30;
-    verbose = settings.value("verbose", false).toBool();
+    restoreAfterUsb = settings.value("restore_after_usb", true).toBool();
+    verbose =settings.value("verbose", false).toBool();
     settings.endGroup();
     return true;
 }
@@ -229,8 +242,10 @@ void Device::key(uint16_t code, int32_t value) {
 
 Controller::Controller()
     : QObject(0), watcher(0), bindTimer(0), fallbackTimer(0), dumpTimer(0), connectTimer(0), wakeTimer(0),
+      storageTimer(0), restoreTimer(0), storageAway(false), usbTookBluetooth(false),
       connectAttempts(0), wakeClock(0),
       bindTicks(0), started(false), powered(false), swapped(false) {
+    poweredOffAt.invalidate();
     lastHeartbeat.invalidate();
     lastConnectedAt.invalidate();
     lastRemoteOpenedAt.invalidate();
@@ -239,7 +254,7 @@ Controller::Controller()
     // Firmware 4 on MediaTek devices runs Kobo's bluedroid bridge under its own
     // bus name; other devices and firmware 5+ use BlueZ's. Both speak the
     // org.bluez interfaces.
-    service = qgetenv("PLATFORM") == "mt8113t-ntx" ? QStringLiteral("com.kobo.mtk.bluedroid")
+    service = qgetenv("PLATFORM") == "mt8113t-ntx" ? QString::fromLatin1(mtkService)
                                                    : QStringLiteral("org.bluez");
 }
 
@@ -277,6 +292,13 @@ void Controller::start() {
     connect(wakeTimer, SIGNAL(timeout()), this, SLOT(wakeTick()));
     wakeClock = long(time(0));
     wakeTimer->start();
+    storageTimer = new QTimer(this);
+    storageTimer->setInterval(storageTickMs);
+    connect(storageTimer, SIGNAL(timeout()), this, SLOT(checkStorage()));
+    restoreTimer = new QTimer(this);
+    restoreTimer->setSingleShot(true);
+    restoreTimer->setInterval(restoreDelayMs);
+    connect(restoreTimer, SIGNAL(timeout()), this, SLOT(restoreBluetooth()));
 
     // Only ever observe the Bluetooth service. A method call to a name that
     // is not running makes D-Bus launch the daemon, and a daemon started that
@@ -413,10 +435,15 @@ void Controller::setPowered(bool value) {
     powered = value;
     nh_log("touchremote: Bluetooth %s", value ? "on" : "off");
     if (value) {
+        usbTookBluetooth = false;
+        restoreTimer->stop();
         startBindBurst();
         fallbackTimer->start();
         startConnectBurst(0);
     } else {
+        poweredOffAt.start();
+        if (storageAway)
+            usbTookBluetooth = true;
         bindTimer->stop();
         fallbackTimer->stop();
         connectTimer->stop();
@@ -685,6 +712,111 @@ void Controller::wakeTick() {
             startConnectBurst(0);
     }
     wakeClock = now;
+    checkStorage();
+}
+
+// --- Bluetooth after a USB connection
+
+// Nickel switches Bluetooth off when it hands the storage to a computer and
+// leaves it off when the connection ends; only the next sleep and wake bring
+// it back. Notice such a connection by the storage going away, and afterwards
+// give Nickel a moment before switching Bluetooth back on ourselves.
+void Controller::checkStorage() {
+    const bool away = ::access(storageMarker, F_OK) != 0;
+    if (away == storageAway)
+        return;
+    storageAway = away;
+    if (away) {
+        if (!powered && poweredOffAt.isValid() && poweredOffAt.elapsed() < usbPowerOffWindowMs)
+            usbTookBluetooth = true;
+        nh_log("touchremote: USB connection started%s", usbTookBluetooth ? ", Bluetooth went off for it" : "");
+        storageTimer->start();
+        return;
+    }
+    storageTimer->stop();
+    nh_log("touchremote: USB connection ended");
+    if (usbTookBluetooth && !powered && config.restoreAfterUsb)
+        restoreTimer->start();
+    usbTookBluetooth = false;
+}
+
+// Only ever switches on what a USB connection switched off: never while
+// Bluetooth is off in Nickel's settings, and never by starting the service.
+void Controller::restoreBluetooth() {
+    if (powered || storageAway)
+        return;
+    QDBusConnectionInterface *bus = QDBusConnection::systemBus().interface();
+    if (!bus || !bus->isServiceRegistered(service)) {
+        nh_log("touchremote: Bluetooth service is not running, leaving Bluetooth off");
+        return;
+    }
+    if (!bluetoothEnabledByUser()) {
+        nh_log("touchremote: Bluetooth is off in the settings, leaving it off");
+        return;
+    }
+    nh_log("touchremote: Bluetooth still off after the USB connection, switching it back on");
+    if (service != QLatin1String(mtkService)) {
+        powerAdapterOn();
+        return;
+    }
+    // Kobo's bluedroid bridge powers the radio through its own manager
+    // before the adapter can be powered.
+    QDBusMessage request = QDBusMessage::createMethodCall(service, QStringLiteral("/"),
+                                                          QStringLiteral("com.kobo.bluetooth.BluedroidManager1"),
+                                                          QStringLiteral("On"));
+    QDBusPendingCallWatcher *watcher =
+        new QDBusPendingCallWatcher(QDBusConnection::systemBus().asyncCall(request, 15000), this);
+    connect(watcher, SIGNAL(finished(QDBusPendingCallWatcher*)), this,
+            SLOT(radioOnFinished(QDBusPendingCallWatcher*)));
+}
+
+void Controller::radioOnFinished(QDBusPendingCallWatcher *watcher) {
+    watcher->deleteLater();
+    if (watcher->isError())
+        nh_log("touchremote: switching the radio on: %s", watcher->error().message().toUtf8().constData());
+    if (!powered && !storageAway)
+        powerAdapterOn();
+}
+
+void Controller::powerAdapterOn() {
+    QDBusMessage request = QDBusMessage::createMethodCall(service, QString::fromLatin1(adapterPath),
+                                                          QStringLiteral("org.freedesktop.DBus.Properties"),
+                                                          QStringLiteral("Set"));
+    request << QStringLiteral("org.bluez.Adapter1") << QStringLiteral("Powered")
+            << QVariant::fromValue(QDBusVariant(QVariant(true)));
+    QDBusPendingCallWatcher *watcher =
+        new QDBusPendingCallWatcher(QDBusConnection::systemBus().asyncCall(request, 15000), this);
+    connect(watcher, SIGNAL(finished(QDBusPendingCallWatcher*)), this,
+            SLOT(adapterOnFinished(QDBusPendingCallWatcher*)));
+}
+
+void Controller::adapterOnFinished(QDBusPendingCallWatcher *watcher) {
+    watcher->deleteLater();
+    if (watcher->isError()) {
+        nh_log("touchremote: switching Bluetooth on: %s", watcher->error().message().toUtf8().constData());
+        return;
+    }
+    // The Powered change normally arrives as a signal; ask in case it did not.
+    if (!powered)
+        queryAdapter();
+}
+
+// Nickel's own Bluetooth switch, from its settings file. A file or key that
+// cannot be read counts as on, since Bluetooth was on before the connection.
+bool Controller::bluetoothEnabledByUser() const {
+    QFile file(QString::fromLatin1(nickelConfFile));
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
+        return true;
+    const QByteArray key("EnabledByUser=");
+    bool inGroup = false;
+    foreach (const QByteArray &raw, file.readAll().split('\n')) {
+        const QByteArray line = raw.trimmed();
+        if (line.startsWith('['))
+            inGroup = line == "[BluetoothSettings]";
+        else if (inGroup && line.startsWith(key))
+            return line.mid(key.size()).trimmed().toLower() == "true";
+    }
+    return true;
 }
 
 // --- actions

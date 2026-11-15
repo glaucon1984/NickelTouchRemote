@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Switch Bluetooth back on after a USB connection. Nickel switches Bluetooth off when it
+  hands the storage to a computer and leaves it off when the connection ends, so the
+  remote stayed disconnected until the next sleep and wake. The mod now switches it back
+  on a few seconds after the connection ends, unless Bluetooth is off in Nickel's
+  settings. `restore_after_usb = false` disables it.
+
 ## v0.3.0 (2026-10-26)
 
 - Hold the first Bluetooth connection attempt after a wake, or after Bluetooth comes on,

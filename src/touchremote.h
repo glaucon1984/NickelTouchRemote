@@ -43,6 +43,7 @@ struct Settings {
     bool powerActivity;       // report activity to Nickel's PowerManager
     bool autoConnect;         // connect the last remote ourselves when Bluetooth is on
     int wifiHoldSeconds;      // hold connection attempts while Wi-Fi is up, at most this long
+    bool restoreAfterUsb;     // switch Bluetooth back on when a USB connection left it off
     bool verbose;             // log every raw input event
 
     Settings();
@@ -104,6 +105,10 @@ private slots:
     void connectTick();
     void connectFinished(QDBusPendingCallWatcher *watcher);
     void wakeTick();
+    void checkStorage();
+    void restoreBluetooth();
+    void radioOnFinished(QDBusPendingCallWatcher *watcher);
+    void adapterOnFinished(QDBusPendingCallWatcher *watcher);
 
 private:
     void reloadSettings();
@@ -126,6 +131,8 @@ private:
     bool wifiUp() const;
     void startConnectBurst(int attemptsDone);
     void connectNow(const QString &path, const char *reason);
+    void powerAdapterOn();
+    bool bluetoothEnabledByUser() const;
 
     Settings config;
     QList<Device *> devices;
@@ -137,7 +144,12 @@ private:
     QTimer *dumpTimer;
     QTimer *connectTimer;
     QTimer *wakeTimer;
-    QStringList remotes;         // Device1 paths of remotes seen connected, most recent last
+    QTimer *storageTimer;        // quick checks for the end of a USB connection
+    QTimer *restoreTimer;        // gives Nickel time to switch Bluetooth back on by itself
+    QElapsedTimer poweredOffAt;  // running since Bluetooth last went off
+    bool storageAway;            // the user storage is with a computer
+    bool usbTookBluetooth;       // Bluetooth went off for the current USB connection
+    QStringList remotes;        // Device1 paths of remotes seen connected, most recent last
     QString lastConnectedPath;   // most recent Device1 that reported Connected
     QElapsedTimer lastConnectedAt;
     QElapsedTimer lastRemoteOpenedAt;  // the daemon may report Connected after the node appears

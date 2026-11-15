@@ -115,6 +115,12 @@ until Wi-Fi goes off again or 30 seconds have passed, whichever comes first; wit
 off the ring still connects within seconds. `wifi_hold` sets that limit in seconds,
 `0` disables the wait.
 
+Nickel switches Bluetooth off when the Kobo is connected to a computer and leaves it off
+when the connection ends; only the next sleep and wake bring it back. The mod switches
+it back on a few seconds after the connection ends, so the ring reconnects without that
+detour. It never does this while Bluetooth is off in Nickel's settings.
+`restore_after_usb = false` turns it off.
+
 While the ring is in use, the mod tells Nickel that a Bluetooth remote is active, so
 Nickel's Bluetooth inactivity timer does not switch the radio off mid-chapter, and it
 reports the presses as activity so the Kobo does not fall asleep while you read with the
@@ -148,6 +154,7 @@ inject = keys               ; keys: arrow keys; view: call Nickel's reader direc
 power_activity = true       ; count presses as activity for Nickel's sleep timer
 auto_connect = true         ; reconnect the last used remote by ourselves
 wifi_hold = 30              ; wait up to this many seconds while Wi-Fi is on, 0 = no wait
+restore_after_usb = true    ; switch Bluetooth back on after a USB connection
 verbose = false             ; log every raw input event
 ```
 
