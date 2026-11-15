@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.4.0 (2026-11-15)
 
 - Switch Bluetooth back on after a USB connection. Nickel switches Bluetooth off when it
   hands the storage to a computer and leaves it off when the connection ends, so the
